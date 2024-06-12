@@ -39,6 +39,24 @@ app.use(
   })
 );
 
+// verifyToken middleware
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  console.log("value inside verifyToken", token);
+  if (!token) {
+    return res.status(401).send({ error: "Unauthorized" });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      console.log(err);
+      return res.status(401).send({ error: "Unauthorized" });
+    }
+    console.log("value in the token", decoded);
+    req.user = decoded;
+    next();
+  });
+};
+
 
 // Routes
 app.get("/", (req, res) => {
@@ -46,8 +64,10 @@ app.get("/", (req, res) => {
 });
 
 async function run() {
-  // BiodatasCollection
-  const BiodatasCollection = client.db("BB-MatrimonyDB").collection("Biodatas");
+  // Database Collections
+  const db = client.db("BB-MatrimonyDB");
+  const UsersCollection = db.collection("Users");
+  const BiodatasCollection = db.collection("Biodatas");
 
   try {
     // Get all the data from the collection
@@ -57,6 +77,25 @@ async function run() {
       res.send(result);
     });
 
+    //creating Token
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      console.log("user for token", user);
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "7d",
+      });
+
+      res.cookie("token", token, cookieOptions).send({ success: true });
+    });
+
+    //clearing Token
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      console.log("logging out", user);
+      res
+        .clearCookie("token", { ...cookieOptions, maxAge: 0 })
+        .send({ success: true });
+    });
 
   } finally {
     // Ensures that the client will close when you finish/error
