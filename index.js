@@ -57,7 +57,6 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-
 // Routes
 app.get("/", (req, res) => {
   res.send("BB-Matrimony server is running");
@@ -68,6 +67,34 @@ async function run() {
   const db = client.db("BB-MatrimonyDB");
   const UsersCollection = db.collection("Users");
   const BiodatasCollection = db.collection("Biodatas");
+  const MarriagesCollection = db.collection("Marriages");
+
+  
+// Function to generate biodata ID
+const generateBiodataID = async (biodataType) => {
+  try {
+    // Example: Fetch the last biodata ID from the database and increment it
+    // Assuming you have a counter collection named "counters" with a document for biodataID
+    const counter = await client
+      .db("BB-MatrimonyDB")
+      .collection("Biodatas")
+      .findOneAndUpdate(
+        { _id: "biodataID" },
+        { $inc: { sequence_value: 1 } },
+        { returnDocument: "after", upsert: true }
+      );
+
+    // Format the ID based on biodataType
+    const sequenceValue = counter.value.sequence_value.toString().padStart(3, '0'); // Assuming a 3-digit sequence
+    const prefix = biodataType === 'Male' ? 'BBM' : 'BBF';
+    const biodataID = `${prefix}-${sequenceValue}`;
+
+    return biodataID;
+  } catch (error) {
+    console.error("Error generating biodata ID:", error);
+    throw error;
+  }
+};
 
   try {
     // Get all the data from the collection
@@ -77,10 +104,55 @@ async function run() {
       res.send(result);
     });
 
+    // put biodata using email
+    app.put("/biodata/:email", async (req, res) => {
+      const email = req.params.email;
+      const updatedBiodata = req.body;
+      const result = await BiodatasCollection.updateOne(
+        { email },
+        { $set: updatedBiodata },
+        { upsert: true }
+      );
+      res.send(result);
+    });
+
+    // get biodata by email
+    app.get("/biodata/:email", async (req, res) => {
+      const email = req.params.email;
+      const data = await BiodatasCollection.find({ email })
+        .sort({ datePosted: -1 })
+        .toArray();
+      res.send(data);
+    });
+
+    // count
+    app.get("/counters", async (req, res) => {
+      try {
+        const totalBiodatas = await BiodatasCollection.countDocuments();
+        const girlsBiodatas = await BiodatasCollection.countDocuments({
+          biodataType: "Female",
+        });
+        const boysBiodatas = await BiodatasCollection.countDocuments({
+          biodataType: "Male",
+        });
+        const marriagesCompleted = await MarriagesCollection.countDocuments();
+
+        res.json({
+          totalBiodatas,
+          girlsBiodatas,
+          boysBiodatas,
+          marriagesCompleted,
+        });
+      } catch (error) {
+        console.error("Error fetching counters:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
     //creating Token
     app.post("/jwt", async (req, res) => {
       const user = req.body;
-      console.log("user for token", user);
+      // console.log("user for token", user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "7d",
       });
@@ -96,7 +168,6 @@ async function run() {
         .clearCookie("token", { ...cookieOptions, maxAge: 0 })
         .send({ success: true });
     });
-
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
