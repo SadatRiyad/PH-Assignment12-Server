@@ -52,6 +52,7 @@ async function run() {
     const UsersCollection = db.collection("Users");
     const BiodatasCollection = db.collection("Biodatas");
     const MarriagesCollection = db.collection("Marriages");
+    const ContactUsCollection = db.collection("ContactUs");
 
     // verifyToken 
     const verifyToken = (req, res, next) => {
@@ -203,6 +204,13 @@ async function run() {
       const data = await BiodatasCollection.find().sort({ biodataID: -1 }).limit(1).toArray();
       const biodataID = data[0]?.biodataID + 1 || 1;
       res.send({ biodataID });
+    });
+
+    // post ContactUs section msg
+    app.post("/contactus", async (req, res) => {
+      const ContactUsMsg = req.body;
+      const result = await ContactUsCollection.insertOne(ContactUsMsg);
+      res.send(result);
     });
 
     //creating Token
