@@ -74,7 +74,7 @@ async function run() {
 
     // use verify admin after verifyToken
     const verifyAdmin = async (req, res, next) => {
-      const email = req.decoded.email;
+      const email = req.params.email;
       const query = { email: email };
       const user = await UsersCollection.findOne(query);
       const isAdmin = user?.role === "admin";
@@ -90,23 +90,33 @@ async function run() {
         const result = await UsersCollection.find().toArray();
         res.send(result);
       });
-  
-      app.get('/users/admin/:email', verifyToken, async (req, res) => {
-      const email = req.params.email;
-  
-        if (email !== req.decoded.email) {
-          return res.status(403).send({ message: 'forbidden access' })
+
+      // get user by email
+      app.get('/users/email/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        if (req.user.email !== req.params.email) {
+          return res.status(403).send({ error: "Forbidden Access" });
         }
-  
         const query = { email: email };
         const user = await UsersCollection.findOne(query);
-        let admin = false;
-        if (user) {
-          admin = user?.role === 'admin';
-        }
-        res.send({ admin });
-      })
+        res.send(user);
+      });
   
+      // check role isAdmin
+      app.get('/users/admin/:email', async (req, res) => {
+        const email = req.params.email;
+        try {
+            const query = { email: email };
+            const user = await UsersCollection.findOne(query);
+            const isAdmin = user?.role === "admin";
+            res.send({ isAdmin });
+        } catch (error) {
+            console.error("Error checking admin status:", error);
+            res.status(500).send({ isAdmin: false, error: "Internal Server Error" });
+        }
+    });
+    
+      // post users and also add role:'user' by default first time
       app.post('/users', async (req, res) => {
         const user = req.body;
         const query = { email: user.email }
@@ -118,7 +128,8 @@ async function run() {
         res.send(result);
       });
   
-      app.patch('/users/admin/:id', async (req, res) => {
+      // patch role admin
+      app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
       // app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
@@ -129,16 +140,126 @@ async function run() {
         }
         const result = await UsersCollection.updateOne(filter, updatedDoc);
         res.send(result);
-      })
+      });
   
+      // delete user
       app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) }
         const result = await UsersCollection.deleteOne(query);
         res.send(result);
-      })
+      });
 
-      
+      // // put favorites biodataID to user collection
+      // app.put('/users/favorites/:id', verifyToken, async (req, res) =>
+      // {
+      //   const id = req.params.id;
+      //   const { email, biodataID } = req.body;
+      //   const query = { email: email };
+      //   const user = await UsersCollection.findOne(query);
+      //   if (!user) {
+      //     return res.status(404).send({ message: 'user not found' });
+      //   }
+      //   const filter = { email: email };
+      //   const updatedDoc = {
+      //     $addToSet: {
+      //       favorites: biodataID
+      //     }
+      //   }
+      //   const result = await UsersCollection.updateOne(filter, updatedDoc);
+      //   res.send(result);
+      // });
+      // app.post('/users/favorites/:id', async (req, res) => {
+      //   const id = req.params.id;
+      //   const { email, biodataID } = req.body;
+      //   const query = { email: email };
+      //   const user = await UsersCollection.findOne(query);
+      //   if (!user) {
+      //     return res.status(404).send({ message: 'user not found' });
+      //   }
+      //   const filter = { email: email };
+      //   const updatedDoc = {
+      //     $addToSet: {
+      //       favorites: biodataID
+      //     }
+      //   }
+      //   const result = await UsersCollection.updateOne(filter, updatedDoc);
+      //   res.send(result);
+      // });
+
+      // put favorites by email
+      app.put('/users/favorites/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        const { 
+          ID,
+          biodataId
+        } = req.body;
+        const favorite ={ 
+          id: new ObjectId(),
+          ID,
+          biodataId
+        };
+        const query = { email: email };
+        const user = await UsersCollection.findOne(query);
+        if (!user) {
+          return res.status(404).send({ message: 'user not found' });
+        }
+        const filter = { email: email };
+        const updatedDoc = {
+            $push: { favorites: favorite },
+            $inc: { favoritesCount: 1 },
+          }
+        const result = await UsersCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      });
+
+      // // delete favorites by email
+      // app.delete('/users/favorites/:email', verifyToken, async (req, res) => {
+      //   const email = req.params.email;
+      //   const { biodataId } = req.body;
+      //   const query = { email: email };
+      //   const user = await UsersCollection.findOne(query);
+      //   if (!user) {
+      //     return res.status(404).send({ message: 'user not found' });
+      //   }
+      //   const filter = { email: email };
+      //   const updatedDoc = {
+      //     $pull: {
+      //       favorites: { biodataId: biodataId }
+      //     }
+      //   }
+      //   const result = await UsersCollection.updateOne(filter, updatedDoc);
+      //   res.send(result);
+      // });
+      // Delete a favorites by its ID
+      app.delete('/users/favorites/:email/:id', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        const id = req.params.id;
+        const query = { email: email };
+        const user = await UsersCollection.findOne(query);
+        if (!user) {
+          return res.status(404).send({ message: 'user not found' });
+        }
+        const filter = { email: email };
+        const updatedDoc = {
+          $pull: { favorites: { id: new ObjectId(id) } },
+          $inc: { favoritesCount: -1 }, // Decrement favorites count
+        }
+        const result = await UsersCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      });
+
+      // get favorites by email
+      app.get('/users/favorites/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        if (req.user.email !== req.params.email) {
+          return res.status(403).send({ error: "Forbidden Access" });
+        }
+        const query = { email: email };
+        const user = await UsersCollection.findOne(query);
+        res.send(user.favorites);
+      });
+
 
     // Get all the data from the collection
     app.get("/biodatas", async (req, res) => {
@@ -153,25 +274,40 @@ async function run() {
       const result = await BiodatasCollection.insertOne(biodata);
       res.send(result);
     });
-    
-    // put biodata using email
-    app.put("/biodata/:email", async (req, res) => {
-      const email = req.params.email;
-      const updatedBiodata = req.body;
+
+    // get biodata by id
+    app.get("/biodata/:id", async (req, res) => {
+      try {
+        const biodataID = req.params.id; // Capture the parameter as a string
+
+        const data = await BiodatasCollection.findOne({ biodataID: biodataID });
+
+        if (!data) {
+          return res.status(404).send({ error: "Biodata not found" });
+        }
+
+        res.send(data);
+      } catch (error) {
+        console.error("Error fetching biodata:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    // put biodata by id
+    app.put("/biodata/id/:id", async (req, res) => {      
+      const data = req.body;
+      const { _id, ...updateData } = data;
       const result = await BiodatasCollection.updateOne(
-        { email },
-        { $set: updatedBiodata },
+        { _id: new ObjectId(req.params.id) },
+        { $set: updateData },
         { upsert: true }
       );
       res.send(result);
     });
-
     // get biodata by email
-    app.get("/biodata/:email", async (req, res) => {
+    app.get("/biodata/email/:email", async (req, res) => {
       const email = req.params.email;
-      const data = await BiodatasCollection.find({ email })
-        .sort({ datePosted: -1 })
-        .toArray();
+      const data = await BiodatasCollection.findOne({ email });
       res.send(data);
     });
 
@@ -197,13 +333,6 @@ async function run() {
         console.error("Error fetching counters:", error);
         res.status(500).json({ error: "Internal Server Error" });
       }
-    });
-
-    // get biodataID everytime +1
-    app.get("/biodataID", async (req, res) => {
-      const data = await BiodatasCollection.find().sort({ biodataID: -1 }).limit(1).toArray();
-      const biodataID = data[0]?.biodataID + 1 || 1;
-      res.send({ biodataID });
     });
 
     // post ContactUs section msg
