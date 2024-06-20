@@ -84,8 +84,22 @@ async function run() {
       next();
     };
 
-       // users related api
-       app.get('/users', async (req, res) => {
+
+    // Marriages related api
+    app.get("/marriages", async (req, res) => {
+      const result = await MarriagesCollection.find().toArray();
+      res.send(result);
+    });
+    // post Marriages 
+    app.post("/marriages", async (req, res) => {
+      const marriage = req.body;
+      const result = await MarriagesCollection.insertOne(marriage);
+      res.send(result);
+    });
+
+
+      // users related api
+      app.get('/users', async (req, res) => {
       //  app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
         const result = await UsersCollection.find().toArray();
         res.send(result);
@@ -150,54 +164,25 @@ async function run() {
         res.send(result);
       });
 
-      // // put favorites biodataID to user collection
-      // app.put('/users/favorites/:id', verifyToken, async (req, res) =>
-      // {
-      //   const id = req.params.id;
-      //   const { email, biodataID } = req.body;
-      //   const query = { email: email };
-      //   const user = await UsersCollection.findOne(query);
-      //   if (!user) {
-      //     return res.status(404).send({ message: 'user not found' });
-      //   }
-      //   const filter = { email: email };
-      //   const updatedDoc = {
-      //     $addToSet: {
-      //       favorites: biodataID
-      //     }
-      //   }
-      //   const result = await UsersCollection.updateOne(filter, updatedDoc);
-      //   res.send(result);
-      // });
-      // app.post('/users/favorites/:id', async (req, res) => {
-      //   const id = req.params.id;
-      //   const { email, biodataID } = req.body;
-      //   const query = { email: email };
-      //   const user = await UsersCollection.findOne(query);
-      //   if (!user) {
-      //     return res.status(404).send({ message: 'user not found' });
-      //   }
-      //   const filter = { email: email };
-      //   const updatedDoc = {
-      //     $addToSet: {
-      //       favorites: biodataID
-      //     }
-      //   }
-      //   const result = await UsersCollection.updateOne(filter, updatedDoc);
-      //   res.send(result);
-      // });
-
       // put favorites by email
       app.put('/users/favorites/:email', verifyToken, async (req, res) => {
         const email = req.params.email;
         const { 
           ID,
-          biodataId
+          biodataId,
+          name,
+          permanentDivision,
+          occupation,
+          profileImage
         } = req.body;
         const favorite ={ 
           id: new ObjectId(),
           ID,
-          biodataId
+          biodataId,
+          name,
+          permanentDivision,
+          occupation,
+          profileImage
         };
         const query = { email: email };
         const user = await UsersCollection.findOne(query);
@@ -213,25 +198,7 @@ async function run() {
         res.send(result);
       });
 
-      // // delete favorites by email
-      // app.delete('/users/favorites/:email', verifyToken, async (req, res) => {
-      //   const email = req.params.email;
-      //   const { biodataId } = req.body;
-      //   const query = { email: email };
-      //   const user = await UsersCollection.findOne(query);
-      //   if (!user) {
-      //     return res.status(404).send({ message: 'user not found' });
-      //   }
-      //   const filter = { email: email };
-      //   const updatedDoc = {
-      //     $pull: {
-      //       favorites: { biodataId: biodataId }
-      //     }
-      //   }
-      //   const result = await UsersCollection.updateOne(filter, updatedDoc);
-      //   res.send(result);
-      // });
-      // Delete a favorites by its ID
+      // delete favorites by email
       app.delete('/users/favorites/:email/:id', verifyToken, async (req, res) => {
         const email = req.params.email;
         const id = req.params.id;
