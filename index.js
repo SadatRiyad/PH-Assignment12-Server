@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.efrqq6z.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -53,6 +54,8 @@ async function run() {
     const BiodatasCollection = db.collection("Biodatas");
     const MarriagesCollection = db.collection("Marriages");
     const ContactUsCollection = db.collection("ContactUs");
+    const ContactRequestsCollection = db.collection("ContactRequests");
+
 
     // verifyToken 
     const verifyToken = (req, res, next) => {
@@ -327,6 +330,119 @@ async function run() {
         .clearCookie("token", { ...cookieOptions, maxAge: 0 })
         .send({ success: true });
     });
+
+// Payment Endpoint
+app.post('/payments', async (req, res) => {
+  const { amount, paymentMethodId } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: 'usd',
+      payment_method: paymentMethodId,
+      confirm: true,
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: 'never',
+      },
+    });
+
+    res.status(200).json({ success: true, paymentIntent });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+
+// Contact Request Endpoint
+app.post('/contact-requests', verifyToken, async (req, res) => {
+  const { biodataId, selfEmail } = req.body;
+
+  try {
+    const newRequest = {
+      biodataId,
+      selfEmail,
+      status: 'pending',
+      // date foe asia
+      createdAt: new Date().toLocaleString('en-US', {
+        timeZone: 'Asia/Dhaka'
+      }),
+    };
+
+    const result = await ContactRequestsCollection.insertOne(newRequest);
+    res.status(201).json({ success: true, request: result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Get Contact Requests for User
+app.get('/contact-requests/:email', verifyToken, async (req, res) => {
+  const email = req.params.email;
+
+  if (req.user.email !== email) {
+    return res.status(403).send({ error: "Forbidden Access" });
+  }
+
+  try {
+    const requests = await ContactRequestsCollection.find({ selfEmail: email }).toArray();
+    res.status(200).json({ success: true, requests });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+// delete Contact Requests for User
+app.delete('/users/ContactRequest/:email/:id', verifyToken, async (req, res) => {
+  const email = req.params.email;
+  const id = req.params.id;
+  const query = { selfEmail: email, _id: new ObjectId(id) };
+  const result = await ContactRequestsCollection.deleteOne(query);
+  res.send(result);
+});
+
+// Approve Contact Request (Admin only)
+app.patch('/contact-requests/approve/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const result = await ContactRequestsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'approved' } }
+    );
+
+    res.status(200).json({ success: true, result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+// cancel Contact Request (Admin only)
+app.patch('/contact-requests/cancel/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const id = req.params.id;
+  
+  try {
+    const result = await ContactRequestsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'cancelled' } }
+    );
+
+    res.status(200).json({ success: true, result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+// Delete Contact Request (Admin only)
+app.delete('/contact-requests/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const id = req.params.id;
+  // next
+  try {
+    const result = await ContactRequestsCollection.deleteOne({ _id: new ObjectId(id) });
+    res.status(200).json({ success: true, result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
