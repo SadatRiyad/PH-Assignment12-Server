@@ -163,6 +163,19 @@ async function run() {
       }
     );
 
+    // patch isPremium true
+    app.patch("/users/premium/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          isPremium: true,
+        },
+      };
+      const result = await UsersCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
+
     // delete user
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
@@ -316,6 +329,37 @@ async function run() {
       }
     });
 
+    // Get counters for the admin dashboard
+    app.get("/admin/counters", verifyToken, async (req, res) => {
+      try {
+        const totalBiodatas = await BiodatasCollection.countDocuments();
+        const maleBiodatas = await BiodatasCollection.countDocuments({
+          biodataType: "Male",
+        });
+        const femaleBiodatas = await BiodatasCollection.countDocuments({
+          biodataType: "Female",
+        });
+        const premiumBiodatas = await BiodatasCollection.countDocuments({
+          isPremium: true,
+        });
+        const totalRevenue = await ContactRequestsCollection.aggregate([
+          { $match: { status: "approved" } },
+          { $group: { _id: null, total: { $sum: "$amountPaid" } } },
+        ]).toArray();
+
+        res.json({
+          totalBiodatas,
+          maleBiodatas,
+          femaleBiodatas,
+          premiumBiodatas,
+          totalRevenue: totalRevenue[0]?.total || 0,
+        });
+      } catch (error) {
+        console.error("Error fetching admin counters:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
     // post ContactUs section msg
     app.post("/contactus", async (req, res) => {
       const ContactUsMsg = req.body;
@@ -373,6 +417,7 @@ async function run() {
           biodataId,
           selfEmail,
           status: "pending",
+          amountPaid: 5,
           // date foe asia
           createdAt: new Date().toLocaleString("en-US", {
             timeZone: "Asia/Dhaka",
