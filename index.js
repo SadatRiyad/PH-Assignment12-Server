@@ -5,7 +5,7 @@ const cookieParser = require("cookie-parser");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.efrqq6z.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -56,8 +56,7 @@ async function run() {
     const ContactUsCollection = db.collection("ContactUs");
     const ContactRequestsCollection = db.collection("ContactRequests");
 
-
-    // verifyToken 
+    // verifyToken
     const verifyToken = (req, res, next) => {
       const token = req.cookies?.token;
       console.log("value inside verifyToken", token);
@@ -87,149 +86,153 @@ async function run() {
       next();
     };
 
-
     // Marriages related api
     app.get("/marriages", async (req, res) => {
       const result = await MarriagesCollection.find().toArray();
       res.send(result);
     });
-    // post Marriages 
+    // post Marriages
     app.post("/marriages", async (req, res) => {
       const marriage = req.body;
       const result = await MarriagesCollection.insertOne(marriage);
       res.send(result);
     });
 
-
-      // users related api
-      app.get('/users', async (req, res) => {
+    // users related api
+    app.get("/users", async (req, res) => {
       //  app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
-        const result = await UsersCollection.find().toArray();
-        res.send(result);
-      });
+      const result = await UsersCollection.find().toArray();
+      res.send(result);
+    });
 
-      // get user by email
-      app.get('/users/email/:email', verifyToken, async (req, res) => {
-        const email = req.params.email;
-        if (req.user.email !== req.params.email) {
-          return res.status(403).send({ error: "Forbidden Access" });
-        }
+    // get user by email
+    app.get("/users/email/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (req.user.email !== req.params.email) {
+        return res.status(403).send({ error: "Forbidden Access" });
+      }
+      const query = { email: email };
+      const user = await UsersCollection.findOne(query);
+      res.send(user);
+    });
+
+    // check role isAdmin
+    app.get("/users/admin/:email", async (req, res) => {
+      const email = req.params.email;
+      try {
         const query = { email: email };
         const user = await UsersCollection.findOne(query);
-        res.send(user);
-      });
-  
-      // check role isAdmin
-      app.get('/users/admin/:email', async (req, res) => {
-        const email = req.params.email;
-        try {
-            const query = { email: email };
-            const user = await UsersCollection.findOne(query);
-            const isAdmin = user?.role === "admin";
-            res.send({ isAdmin });
-        } catch (error) {
-            console.error("Error checking admin status:", error);
-            res.status(500).send({ isAdmin: false, error: "Internal Server Error" });
-        }
+        const isAdmin = user?.role === "admin";
+        res.send({ isAdmin });
+      } catch (error) {
+        console.error("Error checking admin status:", error);
+        res
+          .status(500)
+          .send({ isAdmin: false, error: "Internal Server Error" });
+      }
     });
-    
-      // post users and also add role:'user' by default first time
-      app.post('/users', async (req, res) => {
-        const user = req.body;
-        const query = { email: user.email }
-        const existingUser = await UsersCollection.findOne(query);
-        if (existingUser) {
-          return res.send({ message: 'user already exists', insertedId: null })
-        }
-        const result = await UsersCollection.insertOne(user);
-        res.send(result);
-      });
-  
-      // patch role admin
-      app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
-      // app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
+
+    // post users and also add role:'user' by default first time
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existingUser = await UsersCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "user already exists", insertedId: null });
+      }
+      const result = await UsersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // patch role admin
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        // app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
         const updatedDoc = {
           $set: {
-            role: 'admin'
-          }
-        }
-        const result = await UsersCollection.updateOne(filter, updatedDoc);
-        res.send(result);
-      });
-  
-      // delete user
-      app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
-        const id = req.params.id;
-        const query = { _id: new ObjectId(id) }
-        const result = await UsersCollection.deleteOne(query);
-        res.send(result);
-      });
-
-      // put favorites by email
-      app.put('/users/favorites/:email', verifyToken, async (req, res) => {
-        const email = req.params.email;
-        const { 
-          ID,
-          biodataId,
-          name,
-          permanentDivision,
-          occupation,
-          profileImage
-        } = req.body;
-        const favorite ={ 
-          id: new ObjectId(),
-          ID,
-          biodataId,
-          name,
-          permanentDivision,
-          occupation,
-          profileImage
+            role: "admin",
+          },
         };
-        const query = { email: email };
-        const user = await UsersCollection.findOne(query);
-        if (!user) {
-          return res.status(404).send({ message: 'user not found' });
-        }
-        const filter = { email: email };
-        const updatedDoc = {
-            $push: { favorites: favorite },
-            $inc: { favoritesCount: 1 },
-          }
         const result = await UsersCollection.updateOne(filter, updatedDoc);
         res.send(result);
-      });
+      }
+    );
 
-      // delete favorites by email
-      app.delete('/users/favorites/:email/:id', verifyToken, async (req, res) => {
-        const email = req.params.email;
-        const id = req.params.id;
-        const query = { email: email };
-        const user = await UsersCollection.findOne(query);
-        if (!user) {
-          return res.status(404).send({ message: 'user not found' });
-        }
-        const filter = { email: email };
-        const updatedDoc = {
-          $pull: { favorites: { id: new ObjectId(id) } },
-          $inc: { favoritesCount: -1 }, // Decrement favorites count
-        }
-        const result = await UsersCollection.updateOne(filter, updatedDoc);
-        res.send(result);
-      });
+    // delete user
+    app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await UsersCollection.deleteOne(query);
+      res.send(result);
+    });
 
-      // get favorites by email
-      app.get('/users/favorites/:email', verifyToken, async (req, res) => {
-        const email = req.params.email;
-        if (req.user.email !== req.params.email) {
-          return res.status(403).send({ error: "Forbidden Access" });
-        }
-        const query = { email: email };
-        const user = await UsersCollection.findOne(query);
-        res.send(user.favorites);
-      });
+    // put favorites by email
+    app.put("/users/favorites/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const {
+        ID,
+        biodataId,
+        name,
+        permanentDivision,
+        occupation,
+        profileImage,
+      } = req.body;
+      const favorite = {
+        id: new ObjectId(),
+        ID,
+        biodataId,
+        name,
+        permanentDivision,
+        occupation,
+        profileImage,
+      };
+      const query = { email: email };
+      const user = await UsersCollection.findOne(query);
+      if (!user) {
+        return res.status(404).send({ message: "user not found" });
+      }
+      const filter = { email: email };
+      const updatedDoc = {
+        $push: { favorites: favorite },
+        $inc: { favoritesCount: 1 },
+      };
+      const result = await UsersCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
 
+    // delete favorites by email
+    app.delete("/users/favorites/:email/:id", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const id = req.params.id;
+      const query = { email: email };
+      const user = await UsersCollection.findOne(query);
+      if (!user) {
+        return res.status(404).send({ message: "user not found" });
+      }
+      const filter = { email: email };
+      const updatedDoc = {
+        $pull: { favorites: { id: new ObjectId(id) } },
+        $inc: { favoritesCount: -1 }, // Decrement favorites count
+      };
+      const result = await UsersCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
+
+    // get favorites by email
+    app.get("/users/favorites/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (req.user.email !== req.params.email) {
+        return res.status(403).send({ error: "Forbidden Access" });
+      }
+      const query = { email: email };
+      const user = await UsersCollection.findOne(query);
+      res.send(user.favorites);
+    });
 
     // Get all the data from the collection
     app.get("/biodatas", async (req, res) => {
@@ -264,7 +267,7 @@ async function run() {
     });
 
     // put biodata by id
-    app.put("/biodata/id/:id", async (req, res) => {      
+    app.put("/biodata/id/:id", async (req, res) => {
       const data = req.body;
       const { _id, ...updateData } = data;
       const result = await BiodatasCollection.updateOne(
@@ -279,6 +282,14 @@ async function run() {
       const email = req.params.email;
       const data = await BiodatasCollection.findOne({ email });
       res.send(data);
+    });
+
+    // delete biodata by id
+    app.delete("/biodata/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await BiodatasCollection.deleteOne(query);
+      res.send(result);
     });
 
     // count
@@ -319,7 +330,7 @@ async function run() {
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "7d",
       });
-      res.cookie("token", token, cookieOptions).send({token});
+      res.cookie("token", token, cookieOptions).send({ token });
     });
 
     //clearing Token
@@ -331,118 +342,138 @@ async function run() {
         .send({ success: true });
     });
 
-// Payment Endpoint
-app.post('/payments', async (req, res) => {
-  const { amount, paymentMethodId } = req.body;
+    // Payment Endpoint
+    app.post("/payments", async (req, res) => {
+      const { amount, paymentMethodId } = req.body;
 
-  try {
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency: 'usd',
-      payment_method: paymentMethodId,
-      confirm: true,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: 'never',
-      },
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount,
+          currency: "usd",
+          payment_method: paymentMethodId,
+          confirm: true,
+          automatic_payment_methods: {
+            enabled: true,
+            allow_redirects: "never",
+          },
+        });
+
+        res.status(200).json({ success: true, paymentIntent });
+      } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+      }
     });
 
-    res.status(200).json({ success: true, paymentIntent });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
+    // Contact Request Endpoint
+    app.post("/contact-requests", verifyToken, async (req, res) => {
+      const { biodataId, selfEmail } = req.body;
 
+      try {
+        const newRequest = {
+          biodataId,
+          selfEmail,
+          status: "pending",
+          // date foe asia
+          createdAt: new Date().toLocaleString("en-US", {
+            timeZone: "Asia/Dhaka",
+          }),
+        };
 
-// Contact Request Endpoint
-app.post('/contact-requests', verifyToken, async (req, res) => {
-  const { biodataId, selfEmail } = req.body;
+        const result = await ContactRequestsCollection.insertOne(newRequest);
+        res.status(201).json({ success: true, request: result });
+      } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+      }
+    });
 
-  try {
-    const newRequest = {
-      biodataId,
-      selfEmail,
-      status: 'pending',
-      // date foe asia
-      createdAt: new Date().toLocaleString('en-US', {
-        timeZone: 'Asia/Dhaka'
-      }),
-    };
+    // Get Contact Requests for User
+    app.get("/contact-requests/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
 
-    const result = await ContactRequestsCollection.insertOne(newRequest);
-    res.status(201).json({ success: true, request: result });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
+      if (req.user.email !== email) {
+        return res.status(403).send({ error: "Forbidden Access" });
+      }
 
-// Get Contact Requests for User
-app.get('/contact-requests/:email', verifyToken, async (req, res) => {
-  const email = req.params.email;
-
-  if (req.user.email !== email) {
-    return res.status(403).send({ error: "Forbidden Access" });
-  }
-
-  try {
-    const requests = await ContactRequestsCollection.find({ selfEmail: email }).toArray();
-    res.status(200).json({ success: true, requests });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
-// delete Contact Requests for User
-app.delete('/users/ContactRequest/:email/:id', verifyToken, async (req, res) => {
-  const email = req.params.email;
-  const id = req.params.id;
-  const query = { selfEmail: email, _id: new ObjectId(id) };
-  const result = await ContactRequestsCollection.deleteOne(query);
-  res.send(result);
-});
-
-// Approve Contact Request (Admin only)
-app.patch('/contact-requests/approve/:id', verifyToken, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-
-  try {
-    const result = await ContactRequestsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { status: 'approved' } }
+      try {
+        const requests = await ContactRequestsCollection.find({
+          selfEmail: email,
+        }).toArray();
+        res.status(200).json({ success: true, requests });
+      } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+      }
+    });
+    // delete Contact Requests for User
+    app.delete(
+      "/users/ContactRequest/:email/:id",
+      verifyToken,
+      async (req, res) => {
+        const email = req.params.email;
+        const id = req.params.id;
+        const query = { selfEmail: email, _id: new ObjectId(id) };
+        const result = await ContactRequestsCollection.deleteOne(query);
+        res.send(result);
+      }
     );
 
-    res.status(200).json({ success: true, result });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
-// cancel Contact Request (Admin only)
-app.patch('/contact-requests/cancel/:id', verifyToken, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-  
-  try {
-    const result = await ContactRequestsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { status: 'cancelled' } }
+    // Approve Contact Request (Admin only)
+    app.patch(
+      "/contact-requests/approve/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+
+        try {
+          const result = await ContactRequestsCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status: "approved" } }
+          );
+
+          res.status(200).json({ success: true, result });
+        } catch (error) {
+          res.status(400).json({ success: false, error: error.message });
+        }
+      }
     );
+    // cancel Contact Request (Admin only)
+    app.patch(
+      "/contact-requests/cancel/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
 
-    res.status(200).json({ success: true, result });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
-// Delete Contact Request (Admin only)
-app.delete('/contact-requests/:id', verifyToken, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-  // next
-  try {
-    const result = await ContactRequestsCollection.deleteOne({ _id: new ObjectId(id) });
-    res.status(200).json({ success: true, result });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
+        try {
+          const result = await ContactRequestsCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status: "cancelled" } }
+          );
 
-
+          res.status(200).json({ success: true, result });
+        } catch (error) {
+          res.status(400).json({ success: false, error: error.message });
+        }
+      }
+    );
+    // Delete Contact Request (Admin only)
+    app.delete(
+      "/contact-requests/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        // next
+        try {
+          const result = await ContactRequestsCollection.deleteOne({
+            _id: new ObjectId(id),
+          });
+          res.status(200).json({ success: true, result });
+        } catch (error) {
+          res.status(400).json({ success: false, error: error.message });
+        }
+      }
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
