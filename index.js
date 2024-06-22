@@ -107,7 +107,7 @@ async function run() {
     });
 
     // users related api
-    app.get("/users",verifyToken, async (req, res) => {
+    app.get("/users", verifyToken, async (req, res) => {
       //  app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       const result = await UsersCollection.find().toArray();
       res.send(result);
@@ -115,12 +115,10 @@ async function run() {
 
     app.get("/users/search", verifyToken, async (req, res) => {
       const { username } = req.query;
-      const query = { name: { $regex: username, $options: "i" } }; 
+      const query = { name: { $regex: username, $options: "i" } };
       const users = await UsersCollection.find(query).toArray();
       res.send(users);
     });
-    
-
 
     // get user by email
     app.get("/users/email/:email", verifyToken, async (req, res) => {
@@ -162,18 +160,17 @@ async function run() {
     });
 
     // patch role admin
-        app.patch('/users/admin/:id', verifyToken, async (req, res) => {
-        const id = req.params.id;
-        const filter = { _id: new ObjectId(id) };
-        const updatedDoc = {
-          $set: {
-            role: "admin",
-          },
-        };
-        const result = await UsersCollection.updateOne(filter, updatedDoc);
-        res.send(result);
-      }
-    );
+    app.patch("/users/admin/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: "admin",
+        },
+      };
+      const result = await UsersCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
 
     // patch isPremium true
     app.patch("/users/premium/:id", verifyToken, async (req, res) => {
@@ -315,6 +312,34 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const result = await BiodatasCollection.deleteOne(query);
       res.send(result);
+    });
+
+    // get Premium Request by user for biodata premium
+    app.get("/premium-requests", verifyToken, async (req, res) => {
+      try {
+        const requests = await BiodatasCollection.find({
+          isPremium: "pending",
+        }).toArray();
+        res.json(requests);
+      } catch (error) {
+        console.error("Error fetching premium requests:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // Make a biodata premium
+    app.patch("/biodata/:id/make-premium", verifyToken, async (req, res) => {
+      try {
+        const result = await BiodatasCollection.updateOne(
+          { _id: new ObjectId(req.params.id) },
+          { $set: { isPremium: true } },
+          { upsert: true }
+        );
+        res.json(result);
+      } catch (error) {
+        console.error("Error making biodata premium:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
     });
 
     // count
