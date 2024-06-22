@@ -98,12 +98,29 @@ async function run() {
       res.send(result);
     });
 
+    // delete Marriages by _id by admin
+    app.delete("/marriages/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await MarriagesCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // users related api
-    app.get("/users", async (req, res) => {
+    app.get("/users",verifyToken, async (req, res) => {
       //  app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       const result = await UsersCollection.find().toArray();
       res.send(result);
     });
+
+    app.get("/users/search", verifyToken, async (req, res) => {
+      const { username } = req.query;
+      const query = { name: { $regex: username, $options: "i" } }; 
+      const users = await UsersCollection.find(query).toArray();
+      res.send(users);
+    });
+    
+
 
     // get user by email
     app.get("/users/email/:email", verifyToken, async (req, res) => {
@@ -132,7 +149,7 @@ async function run() {
       }
     });
 
-    // post users and also add role:'user' by default first time
+    // post users
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
@@ -145,12 +162,7 @@ async function run() {
     });
 
     // patch role admin
-    app.patch(
-      "/users/admin/:id",
-      verifyToken,
-      verifyAdmin,
-      async (req, res) => {
-        // app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
+        app.patch('/users/admin/:id', verifyToken, async (req, res) => {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
         const updatedDoc = {
@@ -342,6 +354,7 @@ async function run() {
         const premiumBiodatas = await BiodatasCollection.countDocuments({
           isPremium: true,
         });
+        const marriagesCompleted = await MarriagesCollection.countDocuments();
         const totalRevenue = await ContactRequestsCollection.aggregate([
           { $match: { status: "approved" } },
           { $group: { _id: null, total: { $sum: "$amountPaid" } } },
@@ -352,6 +365,7 @@ async function run() {
           maleBiodatas,
           femaleBiodatas,
           premiumBiodatas,
+          marriagesCompleted,
           totalRevenue: totalRevenue[0]?.total || 0,
         });
       } catch (error) {
