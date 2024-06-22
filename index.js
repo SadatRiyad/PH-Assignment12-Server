@@ -447,13 +447,14 @@ async function run() {
       }
     });
 
-    // Contact Request Endpoint
+    // Contact Request post
     app.post("/contact-requests", verifyToken, async (req, res) => {
-      const { biodataId, selfEmail } = req.body;
+      const { biodataId, selfName, selfEmail } = req.body;
 
       try {
         const newRequest = {
           biodataId,
+          selfName,
           selfEmail,
           status: "pending",
           amountPaid: 5,
@@ -487,6 +488,19 @@ async function run() {
         res.status(400).json({ success: false, error: error.message });
       }
     });
+
+    // get contact request which is pending
+    app.get("/contact-requests", verifyToken, async (req, res) => {
+      try {
+        const requests = await ContactRequestsCollection.find({
+          status: "pending",
+        }).toArray();
+        res.status(200).json({ success: true, requests });
+      } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+      }
+    });
+
     // delete Contact Requests for User
     app.delete(
       "/users/ContactRequest/:email/:id",
@@ -504,7 +518,6 @@ async function run() {
     app.patch(
       "/contact-requests/approve/:id",
       verifyToken,
-      verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
 
