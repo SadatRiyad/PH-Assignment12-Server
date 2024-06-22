@@ -59,7 +59,7 @@ async function run() {
     // verifyToken
     const verifyToken = (req, res, next) => {
       const token = req.cookies?.token;
-      console.log("value inside verifyToken", token);
+      // console.log("value inside verifyToken", token);
       if (!token) {
         return res.status(401).send({ error: "Unauthorized" });
       }
@@ -68,7 +68,7 @@ async function run() {
           console.log(err);
           return res.status(401).send({ error: "Unauthorized" });
         }
-        console.log("value in the token", decoded);
+        // console.log("value in the token", decoded);
         req.user = decoded;
         next();
       });
@@ -76,14 +76,18 @@ async function run() {
 
     // use verify admin after verifyToken
     const verifyAdmin = async (req, res, next) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const user = await UsersCollection.findOne(query);
-      const isAdmin = user?.role === "admin";
-      if (!isAdmin) {
-        return res.status(403).send({ message: "forbidden access" });
+      const email = req.user.email;
+      try {
+        const query = { email: email };
+        const user = await UsersCollection.findOne(query);
+        if (!user || user.role !== "admin") {
+          return res.status(403).json({ error: "Forbidden Access" });
+        }
+        next(); // Proceed to the next middleware or route handler
+      } catch (error) {
+        console.error("Error verifying admin status:", error);
+        res.status(500).json({ error: "Internal Server Error" });
       }
-      next();
     };
 
     // Marriages related api
@@ -92,14 +96,14 @@ async function run() {
       res.send(result);
     });
     // post Marriages
-    app.post("/marriages", async (req, res) => {
+    app.post("/marriages", verifyToken, async (req, res) => {
       const marriage = req.body;
       const result = await MarriagesCollection.insertOne(marriage);
       res.send(result);
     });
 
     // delete Marriages by _id by admin
-    app.delete("/marriages/:id", verifyToken, async (req, res) => {
+    app.delete("/marriages/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await MarriagesCollection.deleteOne(query);
@@ -107,13 +111,12 @@ async function run() {
     });
 
     // users related api
-    app.get("/users", verifyToken, async (req, res) => {
-      //  app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await UsersCollection.find().toArray();
       res.send(result);
     });
 
-    app.get("/users/search", verifyToken, async (req, res) => {
+    app.get("/users/search", verifyToken, verifyAdmin, async (req, res) => {
       const { username } = req.query;
       const query = { name: { $regex: username, $options: "i" } };
       const users = await UsersCollection.find(query).toArray();
@@ -132,7 +135,7 @@ async function run() {
     });
 
     // check role isAdmin
-    app.get("/users/admin/:email", async (req, res) => {
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       try {
         const query = { email: email };
@@ -160,30 +163,40 @@ async function run() {
     });
 
     // patch role admin
-    app.patch("/users/admin/:id", verifyToken, async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          role: "admin",
-        },
-      };
-      const result = await UsersCollection.updateOne(filter, updatedDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+        const result = await UsersCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      }
+    );
 
     // patch isPremium true
-    app.patch("/users/premium/:id", verifyToken, async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          isPremium: true,
-        },
-      };
-      const result = await UsersCollection.updateOne(filter, updatedDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/users/premium/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            isPremium: true,
+          },
+        };
+        const result = await UsersCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      }
+    );
 
     // delete user
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
@@ -264,14 +277,14 @@ async function run() {
     });
 
     // Post biodata
-    app.post("/biodata", async (req, res) => {
+    app.post("/biodata", verifyToken, async (req, res) => {
       const biodata = req.body;
       const result = await BiodatasCollection.insertOne(biodata);
       res.send(result);
     });
 
     // get biodata by id
-    app.get("/biodata/:id", async (req, res) => {
+    app.get("/biodata/:id", verifyToken, async (req, res) => {
       try {
         const biodataID = req.params.id; // Capture the parameter as a string
 
@@ -289,7 +302,7 @@ async function run() {
     });
 
     // put biodata by id
-    app.put("/biodata/id/:id", async (req, res) => {
+    app.put("/biodata/id/:id", verifyToken, async (req, res) => {
       const data = req.body;
       const { _id, ...updateData } = data;
       const result = await BiodatasCollection.updateOne(
@@ -300,14 +313,14 @@ async function run() {
       res.send(result);
     });
     // get biodata by email
-    app.get("/biodata/email/:email", async (req, res) => {
+    app.get("/biodata/email/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const data = await BiodatasCollection.findOne({ email });
       res.send(data);
     });
 
     // delete biodata by id
-    app.delete("/biodata/:id", verifyToken, async (req, res) => {
+    app.delete("/biodata/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await BiodatasCollection.deleteOne(query);
@@ -328,19 +341,24 @@ async function run() {
     });
 
     // Make a biodata premium
-    app.patch("/biodata/:id/make-premium", verifyToken, async (req, res) => {
-      try {
-        const result = await BiodatasCollection.updateOne(
-          { _id: new ObjectId(req.params.id) },
-          { $set: { isPremium: true } },
-          { upsert: true }
-        );
-        res.json(result);
-      } catch (error) {
-        console.error("Error making biodata premium:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+    app.patch(
+      "/biodata/:id/make-premium",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const result = await BiodatasCollection.updateOne(
+            { _id: new ObjectId(req.params.id) },
+            { $set: { isPremium: true } },
+            { upsert: true }
+          );
+          res.json(result);
+        } catch (error) {
+          console.error("Error making biodata premium:", error);
+          res.status(500).json({ error: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     // count
     app.get("/counters", async (req, res) => {
@@ -367,7 +385,7 @@ async function run() {
     });
 
     // Get counters for the admin dashboard
-    app.get("/admin/counters", verifyToken, async (req, res) => {
+    app.get("/admin/counters", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const totalBiodatas = await BiodatasCollection.countDocuments();
         const maleBiodatas = await BiodatasCollection.countDocuments({
@@ -406,27 +424,8 @@ async function run() {
       res.send(result);
     });
 
-    //creating Token
-    app.post("/jwt", async (req, res) => {
-      const user = req.body;
-      // console.log("user for token", user);
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: "7d",
-      });
-      res.cookie("token", token, cookieOptions).send({ token });
-    });
-
-    //clearing Token
-    app.post("/logout", async (req, res) => {
-      const user = req.body;
-      console.log("logging out", user);
-      res
-        .clearCookie("token", { ...cookieOptions, maxAge: 0 })
-        .send({ success: true });
-    });
-
     // Payment Endpoint
-    app.post("/payments", async (req, res) => {
+    app.post("/payments", verifyToken, async (req, res) => {
       const { amount, paymentMethodId } = req.body;
 
       try {
@@ -490,7 +489,7 @@ async function run() {
     });
 
     // get contact request which is pending
-    app.get("/contact-requests", verifyToken, async (req, res) => {
+    app.get("/contact-requests", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const requests = await ContactRequestsCollection.find({
           status: "pending",
@@ -518,6 +517,7 @@ async function run() {
     app.patch(
       "/contact-requests/approve/:id",
       verifyToken,
+      verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
 
@@ -571,6 +571,25 @@ async function run() {
         }
       }
     );
+
+    //creating Token
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      // console.log("user for token", user);
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "7d",
+      });
+      res.cookie("token", token, cookieOptions).send({ token });
+    });
+
+    //clearing Token
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      console.log("logging out", user);
+      res
+        .clearCookie("token", { ...cookieOptions, maxAge: 0 })
+        .send({ success: true });
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
