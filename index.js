@@ -271,7 +271,20 @@ async function run() {
 
     // Get all the data from the collection
     app.get("/biodatas", async (req, res) => {
-      const data = BiodatasCollection.find().sort({ datePosted: -1 });
+      const query = {};
+      // only send needed data
+      const options = {
+        projection: {
+          biodataID: 1,
+          name: 1,
+          biodataType: 1,
+          profileImage: 1,
+          age: 1,
+          occupation: 1,
+          permanentDivision: 1
+        }
+      };
+      const data = BiodatasCollection.find(query, options).sort({ datePosted: -1 });
       const result = await data.toArray();
       res.send(result);
     });
@@ -287,11 +300,19 @@ async function run() {
     app.get("/biodata/:id", verifyToken, async (req, res) => {
       try {
         const biodataID = req.params.id; // Capture the parameter as a string
+        const { email } = req.user; // User email who is requesting
 
         const data = await BiodatasCollection.findOne({ biodataID: biodataID });
+        const user = await UsersCollection.findOne({ email });
 
         if (!data) {
           return res.status(404).send({ error: "Biodata not found" });
+        }
+
+        // Check if the user is a premium user or the user who created the biodata
+        if (!(user?.isPremium || data?.email === email)) {
+          data.mobile = "";
+          data.email = "";
         }
 
         res.send(data);
