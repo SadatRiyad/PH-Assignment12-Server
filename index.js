@@ -300,15 +300,17 @@ async function run() {
     app.get("/biodata/:id", verifyToken, async (req, res) => {
       try {
         const biodataID = req.params.id; // Capture the parameter as a string
+        const { email } = req.user; // User email who is requesting
 
         const data = await BiodatasCollection.findOne({ biodataID: biodataID });
+        const user = await UsersCollection.findOne({ email });
 
         if (!data) {
           return res.status(404).send({ error: "Biodata not found" });
         }
 
         // Check if the user is a premium user or the user who created the biodata
-        if (!data?.isPremium || req.user?.email === data?.email) {
+        if (!(user?.isPremium || data?.email === email)) {
           data.mobile = "";
           data.email = "";
         }
